@@ -1,14 +1,16 @@
+#include <ai/primitive/catch_primitive.h>
 #include <ros/ros.h>
 #include <ros/time.h>
 #include <thunderbots_msgs/Primitive.h>
 #include <thunderbots_msgs/PrimitiveArray.h>
 
+#include "ai/primitive/direct_velocity_primitive.h"
 #include "ai/primitive/directwheels_primitive.h"
 #include "ai/primitive/move_primitive.h"
-#include "ai/primitive/movespin_primitive.h"
 #include "ai/primitive/primitive.h"
 #include "geom/point.h"
 #include "grsim_communication/grsim_backend.h"
+#include "grsim_communication/motion_controller/motion_controller.h"
 #include "util/constants.h"
 #include "util/logger/init.h"
 #include "util/ros_messages.h"
@@ -28,7 +30,8 @@ namespace
     // the Primitives in grSim
     std::vector<std::unique_ptr<Primitive>> primitives;
 
-    Team friendly_team = Team(std::chrono::milliseconds(1000));
+    Team friendly_team = Team(Duration::fromMilliseconds(1000));
+    Ball ball          = Ball(Point(0, 0), Vector(), Timestamp::fromSeconds(0));
 }  // namespace
 
 // Callbacks
@@ -39,6 +42,13 @@ void primitiveUpdateCallback(const thunderbots_msgs::PrimitiveArray::ConstPtr& m
     {
         primitives.emplace_back(Primitive::createPrimitive(prim_msg));
     }
+}
+
+void ballUpdateCallback(const thunderbots_msgs::Ball::ConstPtr& msg)
+{
+    thunderbots_msgs::Ball ball_msg = *msg;
+    Ball updated_ball = Util::ROSMessages::createBallFromROSMessage(ball_msg);
+    ball.updateState(updated_ball);
 }
 
 // Update the friendly team
@@ -69,8 +79,10 @@ int main(int argc, char** argv)
     Util::Logger::LoggerSingleton::initializeLogger(node_handle);
 
     // Initialize variables
-    primitives                 = std::vector<std::unique_ptr<Primitive>>();
-    GrSimBackend grsim_backend = GrSimBackend(NETWORK_ADDRESS, NETWORK_PORT);
+    primitives                      = std::vector<std::unique_ptr<Primitive>>();
+    GrSimBackend grsim_backend      = GrSimBackend(NETWORK_ADDRESS, NETWORK_PORT);
+    ros::Subscriber ball_subscriber = node_handle.subscribe(
+        Util::Constants::NETWORK_INPUT_BALL_TOPIC, 1, ballUpdateCallback);
 
     // We loop at a set rate so that we don't overload the network with too many packets
     ros::Rate tick_rate(TICK_RATE);
@@ -81,12 +93,11 @@ int main(int argc, char** argv)
         // Clear all primitives each tick
         primitives.clear();
 
-
         // Spin once to let all necessary callbacks run
         // The callbacks will populate the primitives vector
         ros::spinOnce();
 
-        grsim_backend.sendPrimitives(primitives, friendly_team);
+        grsim_backend.sendPrimitives(primitives, friendly_team, ball);
 
         tick_rate.sleep();
     }

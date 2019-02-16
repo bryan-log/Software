@@ -26,6 +26,10 @@ add_message_files(
     PrimitiveArray.msg
     Robot.msg
     Team.msg
+    RefboxCommand.msg
+    RefboxData.msg
+    RefboxTeamInfo.msg
+    World.msg
 )
 
 ## Generate added messages and services with any dependencies listed here
