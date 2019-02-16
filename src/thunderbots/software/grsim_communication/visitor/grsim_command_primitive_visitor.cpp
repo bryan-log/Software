@@ -203,7 +203,8 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
     double expected_distance =
         assumed_t_step_seconds *
                     (robot_speed < 0.05 * ROBOT_MAX_SPEED_METERS_PER_SECOND) &&
-                (rotation_remaining.abs() > stop_angle/10) // todo: make this a variable
+                (rotation_remaining.abs() >
+                 stop_angle / 10)  // todo: make this a variable
             ? robot_speed + assumed_t_step_seconds *
                                 ROBOT_MAX_ACCELERATION_METERS_PER_SECOND_SQUARED
             : robot_speed;
