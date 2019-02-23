@@ -206,6 +206,8 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
     else
     {
         final_speed = ROBOT_MAX_SPEED_METERS_PER_SECOND;
+        // correction factor to correct travel distance
+        double radial_error_correction_factor = 3.0;
 
 
         Vector tangent_to_circle_CCW =
@@ -217,7 +219,9 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
                                                : tangent_to_circle_CCW;
 
         // unit vector representing direction robot will travel
-        Vector travel_direction = (tangent_correct_direction + radial_error).norm();
+        Vector travel_direction =
+            (tangent_correct_direction + radial_error_correction_factor * radial_error)
+                .norm();
 
         // how far we expect to travel
         // assume current speed, time interval grSim is using
