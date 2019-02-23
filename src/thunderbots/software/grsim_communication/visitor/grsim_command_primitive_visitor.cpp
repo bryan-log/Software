@@ -205,10 +205,7 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
     }
     else
     {
-        final_speed =
-            (robot.position() - pivot_dest).len() > dist_stop_from_max_speed_metres
-                ? ROBOT_MAX_SPEED_METERS_PER_SECOND
-                : 0;
+        final_speed = ROBOT_MAX_SPEED_METERS_PER_SECOND;
 
 
         Vector tangent_to_circle_CCW =
