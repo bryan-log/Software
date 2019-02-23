@@ -150,8 +150,6 @@ void GrsimCommandPrimitiveVisitor::visit(const MoveSpinPrimitive &move_spin_prim
 
 void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
 {
-    // TODO: https://github.com/UBC-Thunderbots/Software/issues/94
-
     // use v_f^2 = v_i^2 + 2ad; v_f = 0 m/s; v_i = ROBOT_MAX_SPEED_METERS_PER_SECOND
     double dist_stop_from_max_speed_metres =
         ROBOT_MAX_SPEED_METERS_PER_SECOND * ROBOT_MAX_SPEED_METERS_PER_SECOND / 2 /
@@ -164,9 +162,11 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
     // assume grSim is running at 60Hz TODO: this should go somewhere else
     double assumed_t_step_seconds = 1.0 / 60;
 
-    double radial_error_tolerance_fraction = 0.15;
+    double radial_error_tolerance_fraction       = 0.15;
+    double minimum_radial_error_tolerance_metres = 0.1;
     double allowable_radial_error_metres =
-        radial_error_tolerance_fraction * pivot_primitive.getPivotRadius();
+        std::max(minimum_radial_error_tolerance_metres,
+                 radial_error_tolerance_fraction * pivot_primitive.getPivotRadius());
 
     // the target point for the pivot
     Point pivot_dest =
@@ -220,7 +220,7 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
         Vector travel_direction = (tangent_correct_direction + radial_error).norm();
 
         // how far we expect to travel
-        // assume current speed, time interval grSim is using TODO; verify latter is fine
+        // assume current speed, time interval grSim is using
         double robot_speed = robot.velocity().len();
         double expected_distance =
             robot_speed +
