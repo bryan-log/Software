@@ -164,15 +164,12 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
     // assume grSim is running at 60Hz TODO: this should go somewhere else
     double assumed_t_step_seconds = 1.0 / 60;
 
+    double allowable_radial_error_metres = 0.1;
+
     // the target point for the pivot
     Point pivot_dest =
         pivot_primitive.getPivotPoint() + Point(pivot_primitive.getPivotRadius(), 0)
                                               .rotate(pivot_primitive.getFinalAngle());
-
-    double final_speed =
-        (robot.position() - pivot_dest).len() > dist_stop_from_max_speed_metres
-            ? ROBOT_MAX_SPEED_METERS_PER_SECOND
-            : 0;
 
     Vector pivot_point_to_robot = robot.position() - pivot_primitive.getPivotPoint();
 
@@ -183,48 +180,75 @@ void GrsimCommandPrimitiveVisitor::visit(const PivotPrimitive &pivot_primitive)
     // to the point on the circle with the same angle
     Vector radial_error = pivot_point_to_pivot_circle - pivot_point_to_robot;
 
-    Vector tangent_to_circle_CCW =
-        pivot_point_to_pivot_circle.rotate(Angle::ofDegrees(90));
-
-    // if the shortest direction is a clockwise rotation, invert this vector
     Angle rotation_remaining =
         ((pivot_dest - pivot_primitive.getPivotPoint()).orientation() -
          pivot_point_to_pivot_circle.orientation())
             .clamp();
-    Vector tangent_correct_direction = (rotation_remaining < Angle().zero())
-                                           ? -1 * tangent_to_circle_CCW
-                                           : tangent_to_circle_CCW;
 
-    // unit vector representing direction robot will travel
-    Vector travel_direction = (tangent_correct_direction + radial_error).norm();
+    double final_speed;
+    Point controller_end_point;
 
-    // how far we expect to travel
-    // assume current speed, time interval grSim is using TODO; verify latter is fine
-    double robot_speed = robot.velocity().len();
-    double expected_distance =
-        assumed_t_step_seconds *
-                    (robot_speed < 0.05 * ROBOT_MAX_SPEED_METERS_PER_SECOND) &&
-                (rotation_remaining.abs() >
-                 stop_angle / 10)  // todo: make this a variable
-            ? robot_speed + assumed_t_step_seconds *
-                                ROBOT_MAX_ACCELERATION_METERS_PER_SECOND_SQUARED
-            : robot_speed;
+    if (radial_error.len() > allowable_radial_error_metres)
+    {
+        // move to the correct radius
+        controller_end_point =
+            pivot_primitive.getPivotPoint() + pivot_point_to_pivot_circle;
+        final_speed = 0;
+    }
+    else if (rotation_remaining <= stop_angle)
+    {
+        // move towards the end of the pivot
+        controller_end_point = pivot_dest;
+        final_speed          = 0;
+    }
+    else
+    {
+        final_speed =
+            (robot.position() - pivot_dest).len() > dist_stop_from_max_speed_metres
+                ? ROBOT_MAX_SPEED_METERS_PER_SECOND
+                : 0;
 
 
-    Point expected_destination = expected_distance * travel_direction + robot.position();
+        Vector tangent_to_circle_CCW =
+            pivot_point_to_pivot_circle.rotate(Angle::ofDegrees(90));
 
-    // a point twice the distance from robot to expected destination in same direction to
-    // absorb errors in calculations and prevent decelerating and accelerating in a
-    // certain timestep
-    Point point_past_expected_dest =
-        expected_destination + expected_distance * travel_direction;
+        // if the shortest direction is a clockwise rotation, invert this vector
+        Vector tangent_correct_direction = (rotation_remaining < Angle().zero())
+                                               ? -1 * tangent_to_circle_CCW
+                                               : tangent_to_circle_CCW;
+
+        // unit vector representing direction robot will travel
+        Vector travel_direction = (tangent_correct_direction + radial_error).norm();
+
+        // how far we expect to travel
+        // assume current speed, time interval grSim is using TODO; verify latter is fine
+        double robot_speed = robot.velocity().len();
+        double expected_distance =
+            assumed_t_step_seconds *
+                        (robot_speed < 0.05 * ROBOT_MAX_SPEED_METERS_PER_SECOND) &&
+                    (rotation_remaining.abs() >
+                     stop_angle / 10)  // todo: make this a variable
+                ? robot_speed + assumed_t_step_seconds *
+                                    ROBOT_MAX_ACCELERATION_METERS_PER_SECOND_SQUARED
+                : robot_speed;
+
+
+        Point expected_destination =
+            expected_distance * travel_direction + robot.position();
+
+        // a point twice the distance from robot to expected destination in same direction
+        // to absorb errors in calculations and prevent decelerating and accelerating in a
+        // certain timestep
+        controller_end_point =
+            expected_destination + expected_distance * travel_direction;
+    }
+
 
     Angle final_orientation =
-        (pivot_primitive.getPivotPoint() - expected_destination).orientation();
-
+        (pivot_primitive.getPivotPoint() - controller_end_point).orientation();
 
     motion_controller_command = MotionController::MotionControllerCommand(
-        point_past_expected_dest, final_orientation, final_speed, 0.0, false, false);
+        controller_end_point, final_orientation, final_speed, 0.0, false, false);
 }
 
 void GrsimCommandPrimitiveVisitor::visit(const DribblePrimitive &dribble_primitive)
